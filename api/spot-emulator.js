@@ -21,14 +21,14 @@
 
 const CONFIG = {
   // Device Configuration
-  DEVICE_NAME: 'TestTracker',
+  DEVICE_NAME: 'Le marcheur de Montcuq',
   MESSENGER_ID: '0-1234567',
   MODEL_ID: 'Test',
   FEED_ID: 'test-feed-123456789',
   
   // Location Configuration
-  BASE_LATITUDE: 43.63923,  // Starting latitude (Toulouse area)
-  BASE_LONGITUDE: 1.4656,   // Starting longitude (Toulouse area)
+  BASE_LATITUDE: 44.3376,  // Starting latitude (Toulouse area)
+  BASE_LONGITUDE: 1.2084,   // Starting longitude (Toulouse area)
   MOVEMENT_SPEED: 0.001,    // Degrees per update (adjust for faster/slower movement)
   MOVEMENT_VARIANCE: 0.0005, // Random variance in movement
   
