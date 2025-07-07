@@ -218,7 +218,7 @@
                 <a href="/api/spot-emulator/status" class="feed-link" target="_blank">
                     📊 Status JSON
                 </a>
-                <a href="/api/spot-emulator/client.js" class="feed-link" target="_blank">
+                <a href="/api/spot-emulator-client.js" class="feed-link" target="_blank">
                     📜 Client Script
                 </a>
             </div>
@@ -231,7 +231,7 @@
     </div>
 
     <!-- Load the client-side emulator script -->
-    <script src="/api/spot-emulator/client.js"></script>
+    <script src="/api/spot-emulator-client.js" onerror="console.error('Failed to load client script')"></script>
     
     <script>
         // Custom logging function
@@ -305,8 +305,17 @@
                     addLogEntry('✅ Client-side emulator ready', 'info');
                 } else {
                     addLogEntry('❌ Failed to load emulator', 'error');
+                    addLogEntry('🔍 Check if /api/spot-emulator-client.js is accessible', 'warning');
                 }
-            }, 1000);
+            }, 2000);
+        });
+        
+        // Add error handling for script loading
+        window.addEventListener('error', (event) => {
+            if (event.target.src && event.target.src.includes('spot-emulator-client.js')) {
+                addLogEntry(`❌ Failed to load client script: ${event.target.src}`, 'error');
+                addLogEntry('🔍 This might be a 404 error - check the API endpoint', 'warning');
+            }
         });
     </script>
 </body>

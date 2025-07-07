@@ -2,6 +2,9 @@
   "functions": {
     "api/spot-emulator.js": {
       "maxDuration": 30
+    },
+    "api/spot-emulator-client.js": {
+      "maxDuration": 10
     }
   },
   "headers": [
