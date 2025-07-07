@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SPOT Tracker Emulator</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .status-card {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .status-card h3 {
+            margin-top: 0;
+            color: #ffd700;
+            font-size: 1.2em;
+        }
+        
+        .control-panel {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+        }
+        
+        .btn-warning {
+            background: linear-gradient(45deg, #ff9800, #f57c00);
+            color: white;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(45deg, #f44336, #d32f2f);
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .feed-section {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 15px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .feed-section h3 {
+            color: #ffd700;
+            margin-top: 0;
+        }
+        
+        .feed-links {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .feed-link {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px 20px;
+            border-radius: 10px;
+            text-decoration: none;
+            color: white;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .feed-link:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .coordinates {
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        
+        .log {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+        
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 0;
+        }
+        
+        .log-entry.info { color: #4CAF50; }
+        .log-entry.warning { color: #ff9800; }
+        .log-entry.error { color: #f44336; }
+        
+        @media (max-width: 768px) {
+            .control-panel {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .btn {
+                width: 200px;
+            }
+            
+            .feed-links {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 SPOT Tracker Emulator</h1>
+        
+        <div class="status-grid">
+            <div class="status-card">
+                <h3>📍 Current Position</h3>
+                <div class="coordinates" id="current-position">
+                    Loading...
+                </div>
+            </div>
+            
+            <div class="status-card">
+                <h3>🔋 Battery Status</h3>
+                <div class="coordinates" id="battery-status">
+                    Loading...
+                </div>
+            </div>
+            
+            <div class="status-card">
+                <h3>📊 Statistics</h3>
+                <div class="coordinates" id="statistics">
+                    Loading...
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-panel">
+            <button class="btn btn-primary" onclick="window.spotEmulatorControl.start()">
+                ▶️ Start Movement
+            </button>
+            <button class="btn btn-warning" onclick="window.spotEmulatorControl.stop()">
+                ⏸️ Stop Movement
+            </button>
+            <button class="btn btn-danger" onclick="window.spotEmulatorControl.reset()">
+                🔄 Reset Position
+            </button>
+            <button class="btn btn-primary" onclick="sendCustomMessage()">
+                💬 Send Custom Message
+            </button>
+        </div>
+        
+        <div class="feed-section">
+            <h3>📡 Feed Access</h3>
+            <div class="feed-links">
+                <a href="/api/spot-emulator" class="feed-link" target="_blank">
+                    🔗 XML Feed
+                </a>
+                <a href="/api/spot-emulator/status" class="feed-link" target="_blank">
+                    📊 Status JSON
+                </a>
+                <a href="/api/spot-emulator/client.js" class="feed-link" target="_blank">
+                    📜 Client Script
+                </a>
+            </div>
+        </div>
+        
+        <div class="log" id="log">
+            <div class="log-entry info">🚀 SPOT Emulator Interface Loaded</div>
+            <div class="log-entry info">📡 Client-side movement engine starting...</div>
+        </div>
+    </div>
+
+    <!-- Load the client-side emulator script -->
+    <script src="/api/spot-emulator/client.js"></script>
+    
+    <script>
+        // Custom logging function
+        function addLogEntry(message, type = 'info') {
+            const log = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            log.appendChild(entry);
+            log.scrollTop = log.scrollHeight;
+        }
+        
+        // Override console.log to also show in our log
+        const originalLog = console.log;
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            addLogEntry(args.join(' '), 'info');
+        };
+        
+        // Override console.error
+        const originalError = console.error;
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            addLogEntry(args.join(' '), 'error');
+        };
+        
+        // Update display every second
+        setInterval(() => {
+            if (window.spotEmulator && window.spotEmulator.state) {
+                const state = window.spotEmulator.state;
+                
+                // Update position
+                document.getElementById('current-position').textContent = 
+                    `Lat: ${state.latitude.toFixed(5)}\nLon: ${state.longitude.toFixed(5)}\nAlt: ${state.altitude}m`;
+                
+                // Update battery
+                document.getElementById('battery-status').textContent = 
+                    `Status: ${state.batteryState}\nMoving: ${state.isMoving ? 'Yes' : 'No'}`;
+                
+                // Update statistics
+                const now = Date.now();
+                const timeSinceLastTrack = Math.floor((now - state.lastTrackTime) / 1000);
+                document.getElementById('statistics').textContent = 
+                    `Last Track: ${timeSinceLastTrack}s ago\nDirection: ${(state.direction * 180 / Math.PI).toFixed(1)}°`;
+            }
+        }, 1000);
+        
+        // Function to send custom message
+        async function sendCustomMessage() {
+            try {
+                const response = await fetch('/api/spot-emulator/control', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'custom' })
+                });
+                
+                if (response.ok) {
+                    addLogEntry('💬 Custom message sent successfully', 'info');
+                } else {
+                    addLogEntry('❌ Failed to send custom message', 'error');
+                }
+            } catch (error) {
+                addLogEntry(`❌ Error sending custom message: ${error.message}`, 'error');
+            }
+        }
+        
+        // Wait for emulator to be ready
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                if (window.spotEmulator) {
+                    addLogEntry('✅ Client-side emulator ready', 'info');
+                } else {
+                    addLogEntry('❌ Failed to load emulator', 'error');
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html> 

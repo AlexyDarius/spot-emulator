@@ -1,7 +1,13 @@
 /**
  * SPOT Tracker Emulator - Vercel Serverless Function
  * 
- * Deploy this as a Vercel API route for a lightweight SPOT emulator.
+ * INNOVATIVE SOLUTION: Client-Side State Management with Server-Side Validation
+ * 
+ * This approach solves the Vercel serverless limitations by:
+ * 1. Using client-side JavaScript to maintain continuous movement
+ * 2. Server validates and accepts client-generated positions
+ * 3. Time-based synchronization ensures consistency
+ * 4. Minimal server state, maximum client autonomy
  * 
  * CONFIGURABLE VARIABLES (edit these as needed):
  * - BASE_LATITUDE, BASE_LONGITUDE: Starting coordinates
@@ -58,25 +64,29 @@ const CONFIG = {
   // Altitude Configuration
   BASE_ALTITUDE: 150,       // Base altitude in meters
   ALTITUDE_VARIANCE: 50,    // Random variance in altitude
+  
+  // Client-Side Configuration
+  CLIENT_SYNC_INTERVAL: 5000, // How often client should sync (5 seconds)
+  MAX_TIME_DRIFT: 30000,    // Maximum allowed time drift (30 seconds)
+  POSITION_TOLERANCE: 0.01, // Maximum position change tolerance (degrees)
 };
 
 // ============================================================================
-// GLOBAL STATE (stored in memory for this function instance)
+// SERVER-SIDE STATE (minimal, only for validation)
 // ============================================================================
 
-let currentState = {
-  latitude: CONFIG.BASE_LATITUDE,
-  longitude: CONFIG.BASE_LONGITUDE,
-  altitude: CONFIG.BASE_ALTITUDE,
-  batteryState: 'GOOD',
+let serverState = {
+  lastSyncTime: Date.now(),
+  lastPosition: {
+    latitude: CONFIG.BASE_LATITUDE,
+    longitude: CONFIG.BASE_LONGITUDE,
+    altitude: CONFIG.BASE_ALTITUDE
+  },
   messageId: 1000000,
-  lastTrackTime: Date.now(),
-  lastCustomTime: Date.now(),
-  isMoving: true,
-  direction: Math.random() * 2 * Math.PI, // Random initial direction
+  messages: [],
+  batteryState: 'GOOD'
 };
 
-let messages = [];
 const MAX_MESSAGES = 50; // Keep last 50 messages
 
 // ============================================================================
@@ -102,42 +112,39 @@ function calculateNextInterval() {
   return Math.max(1000, baseInterval + randomVariance); // Minimum 1 second
 }
 
-function updateLocation() {
-  if (!currentState.isMoving) return;
+function validateClientPosition(clientPos, clientTime) {
+  const now = Date.now();
+  const timeDrift = Math.abs(now - clientTime);
   
-  // Add some randomness to direction
-  currentState.direction += getRandomFloat(-0.2, 0.2);
-  
-  // Calculate new position
-  const distance = CONFIG.MOVEMENT_SPEED + getRandomFloat(-CONFIG.MOVEMENT_VARIANCE, CONFIG.MOVEMENT_VARIANCE);
-  const latChange = Math.cos(currentState.direction) * distance;
-  const lonChange = Math.sin(currentState.direction) * distance;
-  
-  currentState.latitude += latChange;
-  currentState.longitude += lonChange;
-  
-  // Update altitude with some variation
-  currentState.altitude = Math.max(0, CONFIG.BASE_ALTITUDE + getRandomInt(-CONFIG.ALTITUDE_VARIANCE, CONFIG.ALTITUDE_VARIANCE));
-  
-  // Occasionally change battery state
-  if (Math.random() < CONFIG.BATTERY_CHANGE_CHANCE) {
-    currentState.batteryState = getRandomElement(CONFIG.BATTERY_STATES);
+  // Check if time drift is acceptable
+  if (timeDrift > CONFIG.MAX_TIME_DRIFT) {
+    console.log(`⚠️ Time drift too large: ${timeDrift}ms`);
+    return false;
   }
+  
+  // Check if position change is reasonable
+  const latDiff = Math.abs(clientPos.latitude - serverState.lastPosition.latitude);
+  const lonDiff = Math.abs(clientPos.longitude - serverState.lastPosition.longitude);
+  
+  if (latDiff > CONFIG.POSITION_TOLERANCE || lonDiff > CONFIG.POSITION_TOLERANCE) {
+    console.log(`⚠️ Position change too large: lat=${latDiff}, lon=${lonDiff}`);
+    return false;
+  }
+  
+  return true;
 }
 
 function generateMessageId() {
-  return (++currentState.messageId).toString();
+  return (++serverState.messageId).toString();
 }
 
 function formatDateTime(date) {
   return date.toISOString().replace('Z', '+0000');
 }
 
-function generateTrackMessage() {
-  updateLocation();
-  
-  const now = new Date();
-  const unixTime = Math.floor(now.getTime() / 1000);
+function generateTrackMessage(position, timestamp) {
+  const now = new Date(timestamp);
+  const unixTime = Math.floor(timestamp / 1000);
   
   return {
     id: generateMessageId(),
@@ -145,23 +152,20 @@ function generateTrackMessage() {
     messengerName: CONFIG.DEVICE_NAME,
     unixTime: unixTime,
     messageType: 'UNLIMITED-TRACK',
-    latitude: currentState.latitude.toFixed(5),
-    longitude: currentState.longitude.toFixed(5),
+    latitude: position.latitude.toFixed(5),
+    longitude: position.longitude.toFixed(5),
     modelId: CONFIG.MODEL_ID,
     showCustomMsg: 'Y',
     dateTime: formatDateTime(now),
-    batteryState: currentState.batteryState,
+    batteryState: serverState.batteryState,
     hidden: '0',
-    altitude: currentState.altitude.toString()
+    altitude: position.altitude.toString()
   };
 }
 
-function generateCustomMessage() {
-  updateLocation();
-  
-  const now = new Date();
-  const unixTime = Math.floor(now.getTime() / 1000);
-  const customMessage = getRandomElement(CONFIG.CUSTOM_MESSAGES);
+function generateCustomMessage(position, timestamp, messageContent) {
+  const now = new Date(timestamp);
+  const unixTime = Math.floor(timestamp / 1000);
   
   return {
     id: generateMessageId(),
@@ -169,15 +173,15 @@ function generateCustomMessage() {
     messengerName: CONFIG.DEVICE_NAME,
     unixTime: unixTime,
     messageType: 'CUSTOM',
-    latitude: currentState.latitude.toFixed(5),
-    longitude: currentState.longitude.toFixed(5),
+    latitude: position.latitude.toFixed(5),
+    longitude: position.longitude.toFixed(5),
     modelId: CONFIG.MODEL_ID,
     showCustomMsg: 'Y',
     dateTime: formatDateTime(now),
-    batteryState: currentState.batteryState,
+    batteryState: serverState.batteryState,
     hidden: '0',
-    altitude: currentState.altitude.toString(),
-    messageContent: customMessage
+    altitude: position.altitude.toString(),
+    messageContent: messageContent
   };
 }
 
@@ -231,31 +235,162 @@ ${messagesXML}
 </response>`;
 }
 
-function generateNextMessage() {
-  const now = Date.now();
+function generateClientScript() {
+  return `
+// SPOT Emulator Client-Side State Manager
+// This script runs in the browser to maintain continuous movement
+
+class SPOTEmulatorClient {
+  constructor() {
+    this.state = {
+      latitude: ${CONFIG.BASE_LATITUDE},
+      longitude: ${CONFIG.BASE_LONGITUDE},
+      altitude: ${CONFIG.BASE_ALTITUDE},
+      direction: Math.random() * 2 * Math.PI,
+      isMoving: true,
+      lastTrackTime: Date.now(),
+      lastCustomTime: Date.now(),
+      batteryState: 'GOOD'
+    };
+    
+    this.config = ${JSON.stringify(CONFIG)};
+    this.syncInterval = null;
+    this.movementInterval = null;
+    
+    this.start();
+  }
   
-  // Check if it's time for a track message
-  if (now - currentState.lastTrackTime >= calculateNextInterval()) {
-    const trackMessage = generateTrackMessage();
-    messages.push(trackMessage);
-    currentState.lastTrackTime = now;
+  getRandomFloat(min, max) {
+    return Math.random() * (max - min) + min;
+  }
+  
+  getRandomElement(array) {
+    return array[Math.floor(Math.random() * array.length)];
+  }
+  
+  calculateNextInterval() {
+    const baseInterval = this.config.TRACK_INTERVAL * 1000;
+    const variance = this.config.TRACK_INTERVAL_VARIANCE * 1000;
+    const randomVariance = this.getRandomFloat(-variance, variance);
+    return Math.max(1000, baseInterval + randomVariance);
+  }
+  
+  updateLocation() {
+    if (!this.state.isMoving) return;
     
-    console.log(`📍 Generated TRACK message: ${trackMessage.latitude}, ${trackMessage.longitude} (Battery: ${trackMessage.batteryState})`);
+    // Add some randomness to direction
+    this.state.direction += this.getRandomFloat(-0.2, 0.2);
     
-    // Check if we should also generate a custom message
-    if (Math.random() < CONFIG.CUSTOM_MESSAGE_CHANCE) {
-      const customMessage = generateCustomMessage();
-      messages.push(customMessage);
-      currentState.lastCustomTime = now;
-      
-      console.log(`💬 Generated CUSTOM message: "${customMessage.messageContent}"`);
-    }
+    // Calculate new position
+    const distance = this.config.MOVEMENT_SPEED + this.getRandomFloat(-this.config.MOVEMENT_VARIANCE, this.config.MOVEMENT_VARIANCE);
+    const latChange = Math.cos(this.state.direction) * distance;
+    const lonChange = Math.sin(this.state.direction) * distance;
     
-    // Keep only the last MAX_MESSAGES
-    if (messages.length > MAX_MESSAGES) {
-      messages = messages.slice(-MAX_MESSAGES);
+    this.state.latitude += latChange;
+    this.state.longitude += lonChange;
+    
+    // Update altitude with some variation
+    this.state.altitude = Math.max(0, this.config.BASE_ALTITUDE + Math.floor(this.getRandomFloat(-this.config.ALTITUDE_VARIANCE, this.config.ALTITUDE_VARIANCE)));
+    
+    // Occasionally change battery state
+    if (Math.random() < this.config.BATTERY_CHANGE_CHANCE) {
+      this.state.batteryState = this.getRandomElement(this.config.BATTERY_STATES);
     }
   }
+  
+  async syncWithServer() {
+    try {
+      const now = Date.now();
+      
+      // Check if it's time for a track message
+      if (now - this.state.lastTrackTime >= this.calculateNextInterval()) {
+        this.updateLocation();
+        
+        const trackData = {
+          position: {
+            latitude: this.state.latitude,
+            longitude: this.state.longitude,
+            altitude: this.state.altitude
+          },
+          timestamp: now,
+          messageType: 'TRACK',
+          batteryState: this.state.batteryState
+        };
+        
+        const response = await fetch('/api/spot-emulator/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(trackData)
+        });
+        
+        if (response.ok) {
+          this.state.lastTrackTime = now;
+          console.log('📍 Track message synced with server');
+          
+          // Check if we should also generate a custom message
+          if (Math.random() < this.config.CUSTOM_MESSAGE_CHANCE) {
+            const customMessage = this.getRandomElement(this.config.CUSTOM_MESSAGES);
+            const customData = {
+              ...trackData,
+              messageType: 'CUSTOM',
+              messageContent: customMessage
+            };
+            
+            await fetch('/api/spot-emulator/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(customData)
+            });
+            
+            this.state.lastCustomTime = now;
+            console.log('💬 Custom message synced with server');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+    }
+  }
+  
+  start() {
+    // Start continuous movement
+    this.movementInterval = setInterval(() => {
+      this.updateLocation();
+    }, 1000); // Update every second
+    
+    // Start server synchronization
+    this.syncInterval = setInterval(() => {
+      this.syncWithServer();
+    }, this.config.CLIENT_SYNC_INTERVAL);
+    
+    console.log('🚀 SPOT Emulator Client started');
+  }
+  
+  stop() {
+    if (this.movementInterval) clearInterval(this.movementInterval);
+    if (this.syncInterval) clearInterval(this.syncInterval);
+    console.log('🛑 SPOT Emulator Client stopped');
+  }
+  
+  reset() {
+    this.state.latitude = this.config.BASE_LATITUDE;
+    this.state.longitude = this.config.BASE_LONGITUDE;
+    this.state.altitude = this.config.BASE_ALTITUDE;
+    this.state.direction = Math.random() * 2 * Math.PI;
+    console.log('🔄 Position reset to base coordinates');
+  }
+}
+
+// Auto-start the emulator when this script loads
+window.spotEmulator = new SPOTEmulatorClient();
+
+// Expose control functions globally
+window.spotEmulatorControl = {
+  stop: () => window.spotEmulator.stop(),
+  start: () => window.spotEmulator.start(),
+  reset: () => window.spotEmulator.reset()
+};
+`;
 }
 
 // ============================================================================
@@ -276,24 +411,25 @@ export default function handler(req, res) {
   const { pathname } = new URL(req.url, `http://${req.headers.host}`);
   
   if (req.method === 'GET') {
-    // Generate any pending messages
-    generateNextMessage();
-    
     if (pathname === '/api/spot-emulator/status') {
       // Status endpoint
       res.setHeader('Content-Type', 'application/json');
       res.status(200).json({
         status: 'running',
         config: CONFIG,
-        currentState: {
-          ...currentState,
-          messageCount: messages.length,
-          lastMessage: messages[messages.length - 1] || null
+        serverState: {
+          ...serverState,
+          messageCount: serverState.messages.length,
+          lastMessage: serverState.messages[serverState.messages.length - 1] || null
         }
       });
+    } else if (pathname === '/api/spot-emulator/client.js') {
+      // Client-side script endpoint
+      res.setHeader('Content-Type', 'application/javascript');
+      res.status(200).send(generateClientScript());
     } else {
       // Main SPOT API endpoint
-      const xmlResponse = generateXMLResponse(messages);
+      const xmlResponse = generateXMLResponse(serverState.messages);
       
       res.setHeader('Content-Type', 'application/xml; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -302,43 +438,88 @@ export default function handler(req, res) {
       
       res.status(200).send(xmlResponse);
       
-      console.log(`📡 Served ${messages.length} messages to ${req.headers['x-forwarded-for'] || req.socket.remoteAddress}`);
+      console.log(`📡 Served ${serverState.messages.length} messages to ${req.headers['x-forwarded-for'] || req.socket.remoteAddress}`);
     }
-  } else if (req.method === 'POST' && pathname === '/api/spot-emulator/control') {
-    // Control endpoint
-    const { action } = req.body;
-    
-    switch (action) {
-      case 'stop':
-        currentState.isMoving = false;
-        console.log('🛑 Movement stopped');
-        break;
-        
-      case 'start':
-        currentState.isMoving = true;
-        console.log('▶️ Movement started');
-        break;
-        
-      case 'reset':
-        currentState.latitude = CONFIG.BASE_LATITUDE;
-        currentState.longitude = CONFIG.BASE_LONGITUDE;
-        currentState.altitude = CONFIG.BASE_ALTITUDE;
-        console.log('🔄 Position reset to base coordinates');
-        break;
-        
-      case 'custom':
-        const customMessage = generateCustomMessage();
-        messages.push(customMessage);
-        console.log(`💬 Manual CUSTOM message: "${customMessage.messageContent}"`);
-        break;
-        
-      default:
-        res.status(400).json({ error: 'Invalid action' });
+  } else if (req.method === 'POST') {
+    if (pathname === '/api/spot-emulator/sync') {
+      // Client synchronization endpoint
+      const { position, timestamp, messageType, messageContent, batteryState } = req.body;
+      
+      // Validate client data
+      if (!validateClientPosition(position, timestamp)) {
+        res.status(400).json({ error: 'Invalid client data' });
         return;
+      }
+      
+      // Update server state
+      serverState.lastPosition = position;
+      serverState.lastSyncTime = timestamp;
+      if (batteryState) serverState.batteryState = batteryState;
+      
+      // Generate message based on type
+      let message;
+      if (messageType === 'TRACK') {
+        message = generateTrackMessage(position, timestamp);
+      } else if (messageType === 'CUSTOM') {
+        message = generateCustomMessage(position, timestamp, messageContent);
+      }
+      
+      if (message) {
+        serverState.messages.push(message);
+        
+        // Keep only the last MAX_MESSAGES
+        if (serverState.messages.length > MAX_MESSAGES) {
+          serverState.messages = serverState.messages.slice(-MAX_MESSAGES);
+        }
+        
+        console.log(`✅ ${messageType} message synced: ${message.latitude}, ${message.longitude}`);
+      }
+      
+      res.setHeader('Content-Type', 'application/json');
+      res.status(200).json({ success: true, messageId: message?.id });
+      
+    } else if (pathname === '/api/spot-emulator/control') {
+      // Control endpoint
+      const { action } = req.body;
+      
+      switch (action) {
+        case 'stop':
+          console.log('🛑 Movement stopped (server-side)');
+          break;
+          
+        case 'start':
+          console.log('▶️ Movement started (server-side)');
+          break;
+          
+        case 'reset':
+          serverState.lastPosition = {
+            latitude: CONFIG.BASE_LATITUDE,
+            longitude: CONFIG.BASE_LONGITUDE,
+            altitude: CONFIG.BASE_ALTITUDE
+          };
+          console.log('🔄 Position reset to base coordinates (server-side)');
+          break;
+          
+        case 'custom':
+          const customMessage = generateCustomMessage(
+            serverState.lastPosition,
+            Date.now(),
+            getRandomElement(CONFIG.CUSTOM_MESSAGES)
+          );
+          serverState.messages.push(customMessage);
+          console.log(`💬 Manual CUSTOM message: "${customMessage.messageContent}"`);
+          break;
+          
+        default:
+          res.status(400).json({ error: 'Invalid action' });
+          return;
+      }
+      
+      res.setHeader('Content-Type', 'application/json');
+      res.status(200).json({ success: true, action });
+    } else {
+      res.status(404).json({ error: 'Endpoint not found' });
     }
-    
-    res.setHeader('Content-Type', 'application/json');
-    res.status(200).json({ success: true, action });
   } else {
     res.status(405).json({ error: 'Method not allowed' });
   }
