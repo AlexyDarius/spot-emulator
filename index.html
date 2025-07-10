@@ -282,7 +282,7 @@
         // Function to send custom message
         async function sendCustomMessage() {
             try {
-                const response = await fetch('/api/spot-emulator/control', {
+                const response = await fetch('/api/spot-emulator-control', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ action: 'custom' })

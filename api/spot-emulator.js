@@ -277,7 +277,7 @@ class SPOTEmulatorClient {
         
         console.log('🔄 Attempting to sync with server...');
         
-        const response = await fetch('/api/spot-emulator/sync', {
+        const response = await fetch('/api/spot-emulator-sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(trackData)
@@ -296,7 +296,7 @@ class SPOTEmulatorClient {
               messageContent: customMessage
             };
             
-            await fetch('/api/spot-emulator/sync', {
+            await fetch('/api/spot-emulator-sync', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(customData)
