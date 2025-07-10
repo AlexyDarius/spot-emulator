@@ -3,6 +3,8 @@
  * 
  * INNOVATIVE SOLUTION: Client-Side State Management with Server-Side Validation
  * 
+ * DEPLOYMENT: Force redeploy to fix missing endpoints
+ * 
  * This approach solves the Vercel serverless limitations by:
  * 1. Using client-side JavaScript to maintain continuous movement
  * 2. Server validates and accepts client-generated positions
