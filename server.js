@@ -21,8 +21,8 @@ const CONFIG = {
   // Location Configuration
   BASE_LATITUDE: 43.2646,  // Starting latitude (Toulouse area)
   BASE_LONGITUDE: 6.6410,   // Starting longitude (Toulouse area)
-  MOVEMENT_SPEED: 0.001,    // Degrees per update (adjust for faster/slower movement)
-  MOVEMENT_VARIANCE: 0.0005, // Random variance in movement
+  MOVEMENT_SPEED: 0.0001,    // Degrees per update (reduced for more realistic movement)
+  MOVEMENT_VARIANCE: 0.00005, // Random variance in movement (reduced)
   
   // Timing Configuration
   TRACK_INTERVAL: 30,       // Base interval for UNLIMITED-TRACK messages (seconds)
@@ -54,7 +54,7 @@ const CONFIG = {
   // Client-Side Configuration
   CLIENT_SYNC_INTERVAL: 5000, // How often client should sync (5 seconds)
   MAX_TIME_DRIFT: 30000,    // Maximum allowed time drift (30 seconds)
-  POSITION_TOLERANCE: 0.01, // Maximum position change tolerance (degrees)
+  POSITION_TOLERANCE: 0.1,  // Maximum position change tolerance (degrees) - increased for faster movement
 };
 
 // Server-side state (minimal, only for validation)
