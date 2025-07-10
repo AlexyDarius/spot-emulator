@@ -78,8 +78,8 @@ const CONFIG = {
 let serverState = {
   lastSyncTime: Date.now(),
   lastPosition: {
-    latitude: CONFIG.BASE_LATITUDE,
-    longitude: CONFIG.BASE_LONGITUDE,
+  latitude: CONFIG.BASE_LATITUDE,
+  longitude: CONFIG.BASE_LONGITUDE,
     altitude: CONFIG.BASE_ALTITUDE
   },
   messageId: 1000000,
@@ -120,6 +120,12 @@ function validateClientPosition(clientPos, clientTime) {
   if (timeDrift > CONFIG.MAX_TIME_DRIFT) {
     console.log(`⚠️ Time drift too large: ${timeDrift}ms`);
     return false;
+  }
+  
+  // For the first sync, allow any position (initial position)
+  if (serverState.messages.length === 0) {
+    console.log('✅ First sync - allowing initial position');
+    return true;
   }
   
   // Check if position change is reasonable
@@ -283,80 +289,95 @@ export default function handler(req, res) {
   } else if (req.method === 'POST') {
     if (pathname === '/api/spot-emulator/sync') {
       // Client synchronization endpoint
-      const { position, timestamp, messageType, messageContent, batteryState } = req.body;
-      
-      // Validate client data
-      if (!validateClientPosition(position, timestamp)) {
-        res.status(400).json({ error: 'Invalid client data' });
-        return;
-      }
-      
-      // Update server state
-      serverState.lastPosition = position;
-      serverState.lastSyncTime = timestamp;
-      if (batteryState) serverState.batteryState = batteryState;
-      
-      // Generate message based on type
-      let message;
-      if (messageType === 'TRACK') {
-        message = generateTrackMessage(position, timestamp);
-      } else if (messageType === 'CUSTOM') {
-        message = generateCustomMessage(position, timestamp, messageContent);
-      }
-      
-      if (message) {
-        serverState.messages.push(message);
+      try {
+        const { position, timestamp, messageType, messageContent, batteryState } = req.body;
         
-        // Keep only the last MAX_MESSAGES
-        if (serverState.messages.length > MAX_MESSAGES) {
-          serverState.messages = serverState.messages.slice(-MAX_MESSAGES);
+        console.log(`🔄 Sync request received: ${messageType} at ${new Date(timestamp).toISOString()}`);
+        
+        // Validate client data
+        if (!validateClientPosition(position, timestamp)) {
+          console.log('❌ Validation failed');
+          res.status(400).json({ error: 'Invalid client data' });
+          return;
         }
         
-        console.log(`✅ ${messageType} message synced: ${message.latitude}, ${message.longitude}`);
+        // Update server state
+        serverState.lastPosition = position;
+        serverState.lastSyncTime = timestamp;
+        if (batteryState) serverState.batteryState = batteryState;
+        
+        // Generate message based on type
+        let message;
+        if (messageType === 'TRACK') {
+          message = generateTrackMessage(position, timestamp);
+        } else if (messageType === 'CUSTOM') {
+          message = generateCustomMessage(position, timestamp, messageContent);
+        }
+        
+        if (message) {
+          serverState.messages.push(message);
+          
+          // Keep only the last MAX_MESSAGES
+          if (serverState.messages.length > MAX_MESSAGES) {
+            serverState.messages = serverState.messages.slice(-MAX_MESSAGES);
+          }
+          
+          console.log(`✅ ${messageType} message synced: ${message.latitude}, ${message.longitude}`);
+        }
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.status(200).json({ success: true, messageId: message?.id });
+      } catch (error) {
+        console.error('❌ Sync error:', error);
+        res.status(500).json({ error: 'Internal server error' });
       }
-      
-      res.setHeader('Content-Type', 'application/json');
-      res.status(200).json({ success: true, messageId: message?.id });
       
     } else if (pathname === '/api/spot-emulator/control') {
       // Control endpoint
-      const { action } = req.body;
-      
-      switch (action) {
-        case 'stop':
-          console.log('🛑 Movement stopped (server-side)');
-          break;
-          
-        case 'start':
-          console.log('▶️ Movement started (server-side)');
-          break;
-          
-        case 'reset':
-          serverState.lastPosition = {
-            latitude: CONFIG.BASE_LATITUDE,
-            longitude: CONFIG.BASE_LONGITUDE,
-            altitude: CONFIG.BASE_ALTITUDE
-          };
-          console.log('🔄 Position reset to base coordinates (server-side)');
-          break;
-          
-        case 'custom':
-          const customMessage = generateCustomMessage(
-            serverState.lastPosition,
-            Date.now(),
-            getRandomElement(CONFIG.CUSTOM_MESSAGES)
-          );
-          serverState.messages.push(customMessage);
-          console.log(`💬 Manual CUSTOM message: "${customMessage.messageContent}"`);
-          break;
-          
-        default:
-          res.status(400).json({ error: 'Invalid action' });
-          return;
+      try {
+        const { action } = req.body;
+        
+        console.log(`🎮 Control request: ${action}`);
+        
+        switch (action) {
+          case 'stop':
+            console.log('🛑 Movement stopped (server-side)');
+            break;
+            
+          case 'start':
+            console.log('▶️ Movement started (server-side)');
+            break;
+            
+          case 'reset':
+            serverState.lastPosition = {
+              latitude: CONFIG.BASE_LATITUDE,
+              longitude: CONFIG.BASE_LONGITUDE,
+              altitude: CONFIG.BASE_ALTITUDE
+            };
+            console.log('🔄 Position reset to base coordinates (server-side)');
+            break;
+            
+          case 'custom':
+            const customMessage = generateCustomMessage(
+              serverState.lastPosition,
+              Date.now(),
+              getRandomElement(CONFIG.CUSTOM_MESSAGES)
+            );
+            serverState.messages.push(customMessage);
+            console.log(`💬 Manual CUSTOM message: "${customMessage.messageContent}"`);
+            break;
+            
+          default:
+            res.status(400).json({ error: 'Invalid action' });
+            return;
+        }
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.status(200).json({ success: true, action });
+      } catch (error) {
+        console.error('❌ Control error:', error);
+        res.status(500).json({ error: 'Internal server error' });
       }
-      
-      res.setHeader('Content-Type', 'application/json');
-      res.status(200).json({ success: true, action });
     } else {
       res.status(404).json({ error: 'Endpoint not found' });
     }
