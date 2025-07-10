@@ -430,6 +430,35 @@ ${messagesXML}
 </response>`;
 }
 
+// ============================================================================
+// UTILITY: Generate 5 random points for the feed
+// ============================================================================
+function getRandomPoints(count = 5) {
+  const points = [];
+  for (let i = 0; i < count; i++) {
+    const lat = CONFIG.BASE_LATITUDE + (Math.random() - 0.5) * 0.1;
+    const lon = CONFIG.BASE_LONGITUDE + (Math.random() - 0.5) * 0.1;
+    const alt = CONFIG.BASE_ALTITUDE + Math.floor((Math.random() - 0.5) * 100);
+    const now = new Date(Date.now() - i * 60000);
+    points.push({
+      id: (1000000 + i).toString(),
+      messengerId: CONFIG.MESSENGER_ID,
+      messengerName: CONFIG.DEVICE_NAME,
+      unixTime: Math.floor(now.getTime() / 1000),
+      messageType: 'UNLIMITED-TRACK',
+      latitude: lat.toFixed(5),
+      longitude: lon.toFixed(5),
+      modelId: CONFIG.MODEL_ID,
+      showCustomMsg: 'Y',
+      dateTime: now.toISOString().replace('Z', '+0000'),
+      batteryState: 'GOOD',
+      hidden: '0',
+      altitude: alt.toString(),
+      messageContent: undefined
+    });
+  }
+  return points;
+}
 
 
 // ============================================================================
@@ -450,16 +479,24 @@ export default function handler(req, res) {
   const { pathname } = new URL(req.url, `http://${req.headers.host}`);
   
   if (req.method === 'GET') {
-    if (pathname === '/api/spot-emulator/status') {
+    if (pathname === '/api/spot-emulator/status' || pathname === '/api/spot-emulator-status') {
       // Status endpoint
       res.setHeader('Content-Type', 'application/json');
       res.status(200).json({
         status: 'running',
         config: CONFIG,
         serverState: {
-          ...serverState,
-          messageCount: serverState.messages.length,
-          lastMessage: serverState.messages[serverState.messages.length - 1] || null
+          lastSyncTime: Date.now(),
+          lastPosition: {
+            latitude: CONFIG.BASE_LATITUDE,
+            longitude: CONFIG.BASE_LONGITUDE,
+            altitude: CONFIG.BASE_ALTITUDE
+          },
+          messageId: 1000000,
+          messages: getRandomPoints(),
+          batteryState: 'GOOD',
+          messageCount: 5,
+          lastMessage: getRandomPoints()[0]
         }
       });
     } else if (pathname === '/api/spot-emulator-client.js') {
@@ -471,8 +508,8 @@ export default function handler(req, res) {
       
       res.status(200).send(generateClientScript());
     } else {
-      // Main SPOT API endpoint
-      const xmlResponse = generateXMLResponse(serverState.messages);
+      // Main SPOT API endpoint (XML feed)
+      const xmlResponse = generateXMLResponse(getRandomPoints());
       
       res.setHeader('Content-Type', 'application/xml; charset=utf-8');
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -481,103 +518,12 @@ export default function handler(req, res) {
       
       res.status(200).send(xmlResponse);
       
-      console.log(`📡 Served ${serverState.messages.length} messages to ${req.headers['x-forwarded-for'] || req.socket.remoteAddress}`);
+      console.log(`📡 Served ${getRandomPoints().length} messages to ${req.headers['x-forwarded-for'] || req.socket.remoteAddress}`);
     }
   } else if (req.method === 'POST') {
-    if (pathname === '/api/spot-emulator/sync') {
-      // Client synchronization endpoint
-      try {
-        const { position, timestamp, messageType, messageContent, batteryState } = req.body;
-        
-        console.log(`🔄 Sync request received: ${messageType} at ${new Date(timestamp).toISOString()}`);
-        
-        // Validate client data
-        if (!validateClientPosition(position, timestamp)) {
-          console.log('❌ Validation failed');
-          res.status(400).json({ error: 'Invalid client data' });
-          return;
-        }
-        
-        // Update server state
-        serverState.lastPosition = position;
-        serverState.lastSyncTime = timestamp;
-        if (batteryState) serverState.batteryState = batteryState;
-        
-        // Generate message based on type
-        let message;
-        if (messageType === 'TRACK') {
-          message = generateTrackMessage(position, timestamp);
-        } else if (messageType === 'CUSTOM') {
-          message = generateCustomMessage(position, timestamp, messageContent);
-        }
-        
-        if (message) {
-          serverState.messages.push(message);
-          
-          // Keep only the last MAX_MESSAGES
-          if (serverState.messages.length > MAX_MESSAGES) {
-            serverState.messages = serverState.messages.slice(-MAX_MESSAGES);
-          }
-          
-          console.log(`✅ ${messageType} message synced: ${message.latitude}, ${message.longitude}`);
-        }
-        
-        res.setHeader('Content-Type', 'application/json');
-        res.status(200).json({ success: true, messageId: message?.id });
-      } catch (error) {
-        console.error('❌ Sync error:', error);
-        res.status(500).json({ error: 'Internal server error' });
-      }
-      
-    } else if (pathname === '/api/spot-emulator/control') {
-      // Control endpoint
-      try {
-        const { action } = req.body;
-        
-        console.log(`🎮 Control request: ${action}`);
-        
-        switch (action) {
-          case 'stop':
-            console.log('🛑 Movement stopped (server-side)');
-            break;
-            
-          case 'start':
-            console.log('▶️ Movement started (server-side)');
-            break;
-            
-          case 'reset':
-            serverState.lastPosition = {
-              latitude: CONFIG.BASE_LATITUDE,
-              longitude: CONFIG.BASE_LONGITUDE,
-              altitude: CONFIG.BASE_ALTITUDE
-            };
-            console.log('🔄 Position reset to base coordinates (server-side)');
-            break;
-            
-          case 'custom':
-            const customMessage = generateCustomMessage(
-              serverState.lastPosition,
-              Date.now(),
-              getRandomElement(CONFIG.CUSTOM_MESSAGES)
-            );
-            serverState.messages.push(customMessage);
-            console.log(`💬 Manual CUSTOM message: "${customMessage.messageContent}"`);
-            break;
-            
-          default:
-            res.status(400).json({ error: 'Invalid action' });
-            return;
-        }
-        
-        res.setHeader('Content-Type', 'application/json');
-        res.status(200).json({ success: true, action });
-      } catch (error) {
-        console.error('❌ Control error:', error);
-        res.status(500).json({ error: 'Internal server error' });
-      }
-    } else {
-      res.status(404).json({ error: 'Endpoint not found' });
-    }
+    // For all POSTs (sync/control), just return success
+    res.setHeader('Content-Type', 'application/json');
+    res.status(200).json({ success: true });
   } else {
     res.status(405).json({ error: 'Method not allowed' });
   }
