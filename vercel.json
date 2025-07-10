@@ -2,6 +2,15 @@
   "functions": {
     "api/spot-emulator.js": {
       "maxDuration": 30
+    },
+    "api/spot-emulator-sync.js": {
+      "maxDuration": 30
+    },
+    "api/spot-emulator-status.js": {
+      "maxDuration": 30
+    },
+    "api/spot-emulator-control.js": {
+      "maxDuration": 30
     }
   },
   "headers": [
